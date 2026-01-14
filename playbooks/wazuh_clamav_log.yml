@@ -13,6 +13,44 @@
     ANSIBLE_HOST_KEY_CHECKING: "False"
 
   tasks:
+    - name: Configure ClamAV for file logging
+      blockinfile:
+        path: /etc/clamav/clamd.conf
+        marker: "# {mark} ANSIBLE WA ZUH LOGGING"
+        block: |
+          # ANSIBLE WA ZUH LOGGING
+          LogFile /var/log/clamav/clamav.log
+          LogTime true
+          LogRotate false
+          LogVerbose false
+
+    - name: Configure freshclam for file logging
+      blockinfile:
+        path: /etc/clamav/freshclam.conf
+        marker: "# {mark} ANSIBLE WA ZUH LOGGING"
+        block: |
+          # ANSIBLE WA ZUH LOGGING
+          LogFile /var/log/clamav/clamav.log
+          LogTime true
+          LogRotate false
+          LogVerbose false
+
+    - name: Ensure ClamAV log directory and file
+      file:
+        path: /var/log/clamav/clamav.log
+        state: touch
+        owner: clamav
+        group: clamav
+        mode: '0644'
+
+    - name: Restart ClamAV services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - clamav-daemon
+        - clamav-freshclam
+
     - name: Backup ossec.conf
       copy:
         src: /var/ossec/etc/ossec.conf
@@ -22,13 +60,27 @@
     - name: Add ClamAV localfile to ossec.conf
       blockinfile:
         path: /var/ossec/etc/ossec.conf
-        insertbefore: "</ossec_config>"  # ← CHANGÉ !
+        insertbefore: "</ossec_config>"
         marker: '<!-- {mark} ANSIBLE CLAMAV LOG -->'
         block: |
           <localfile>
             <log_format>syslog</log_format>
             <location>/var/log/clamav/clamav.log</location>
           </localfile>
+
+    - name: Test ClamAV logging
+      command: clamscan --verbose /usr/bin/ls
+      register: clamscan_test
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Verify ClamAV log content
+      command: tail -3 /var/log/clamav/clamav.log
+      register: clamav_log_content
+      changed_when: false
+
+    - debug:
+        msg: "ClamAV log test result: {{ clamav_log_content.stdout_lines }}"
 
     - name: Restart wazuh-agent
       systemd:
