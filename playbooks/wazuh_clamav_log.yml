@@ -1,6 +1,6 @@
 ---
 - name: Add ClamAV log to Wazuh agent
-  hosts: wazuh_agents
+  hosts: linux_servers
   become: true
   become_method: sudo
   become_user: root
