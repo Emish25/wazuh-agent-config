@@ -13,29 +13,44 @@
     ANSIBLE_HOST_KEY_CHECKING: "False"
 
   tasks:
-    - name: Configure ClamAV for file logging
+    - name: Clean existing logging configuration from clamd
+      lineinfile:
+        path: /etc/clamav/clamd.conf
+        regexp: '^(LogFile|LogTime|LogRotate|LogVerbose|LogSyslog) '
+        state: absent
+
+    - name: Configure ClamAV for Wazuh file logging
       blockinfile:
         path: /etc/clamav/clamd.conf
-        marker: "# {mark} ANSIBLE WA ZUH LOGGING"
+        marker: "# {mark} WAZUH INTEGRATION"
         block: |
-          # ANSIBLE WA ZUH LOGGING
+          # WAZUH INTEGRATION - Log to file for Wazuh monitoring
+          LogSyslog false
           LogFile /var/log/clamav/clamav.log
           LogTime true
           LogRotate false
           LogVerbose false
+          LogFileUnlock false
 
-    - name: Configure freshclam for file logging
+    - name: Clean existing logging configuration from freshclam
+      lineinfile:
+        path: /etc/clamav/freshclam.conf
+        regexp: '^(LogFile|LogTime|LogRotate|LogVerbose|LogSyslog) '
+        state: absent
+
+    - name: Configure freshclam for Wazuh file logging
       blockinfile:
         path: /etc/clamav/freshclam.conf
-        marker: "# {mark} ANSIBLE WA ZUH LOGGING"
+        marker: "# {mark} WAZUH INTEGRATION"
         block: |
-          # ANSIBLE WA ZUH LOGGING
+          # WAZUH INTEGRATION - Log to file for Wazuh monitoring
+          LogSyslog false
           LogFile /var/log/clamav/clamav.log
           LogTime true
           LogRotate false
           LogVerbose false
 
-    - name: Ensure ClamAV log directory and file
+    - name: Ensure ClamAV log file exists with correct permissions
       file:
         path: /var/log/clamav/clamav.log
         state: touch
@@ -68,22 +83,41 @@
             <location>/var/log/clamav/clamav.log</location>
           </localfile>
 
-    - name: Test ClamAV logging
-      command: clamscan --verbose /usr/bin/ls
+    - name: Generate test ClamAV event
+      command: |
+        echo "X5O!P%@AP[4\\PZX54(P^)7CC)7}\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\$H+H*" > /tmp/wazuh-test.txt
+        clamscan --verbose /tmp/wazuh-test.txt
       register: clamscan_test
       changed_when: false
       ignore_errors: yes
 
-    - name: Verify ClamAV log content
-      command: tail -3 /var/log/clamav/clamav.log
-      register: clamav_log_content
+    - name: Display ClamAV logs for verification
+      command: tail -10 /var/log/clamav/clamav.log
+      register: clamav_logs
       changed_when: false
 
     - debug:
-        msg: "ClamAV log test result: {{ clamav_log_content.stdout_lines }}"
+        msg: |
+          ClamAV logs for Wazuh:
+          {{ clamav_logs.stdout_lines | join('\n') }}
 
     - name: Restart wazuh-agent
       systemd:
         name: wazuh-agent
         state: restarted
         enabled: yes
+
+    - name: Wait for Wazuh to process logs
+      pause:
+        seconds: 5
+
+    - name: Check if Wazuh detected ClamAV logs
+      command: sudo tail -20 /var/ossec/logs/ossec.log | grep -i "clamav\|logcollector.*clamav"
+      register: wazuh_detection
+      changed_when: false
+      ignore_errors: yes
+
+    - debug:
+        msg: |
+          Wazuh detection result:
+          {{ wazuh_detection.stdout if wazuh_detection.stdout != '' else 'No ClamAV detection in Wazuh logs yet. Check /var/ossec/logs/alerts/alerts.log' }}
