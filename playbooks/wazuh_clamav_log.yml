@@ -1,6 +1,5 @@
 ---
-- name: Add ClamAV log to Wazuh agent
-  hosts: linux_servers
+- hosts: linux_servers
   become: true
   become_method: sudo
   become_user: root
@@ -23,9 +22,13 @@
     - name: Add ClamAV localfile to ossec.conf
       blockinfile:
         path: /var/ossec/etc/ossec.conf
-        insertafter: "<ossec_config>"
-        marker: "<!-- {mark} ANSIBLE CLAMAV LOG -->"
-        block: "{{ lookup('file', '../files/clamav_localfile.xml') }}"
+        insertbefore: "</ossec_config>"  # ← CHANGÉ !
+        marker: '<!-- {mark} ANSIBLE CLAMAV LOG -->'
+        block: |
+          <localfile>
+            <log_format>syslog</log_format>
+            <location>/var/log/clamav/clamav.log</location>
+          </localfile>
 
     - name: Restart wazuh-agent
       systemd:
