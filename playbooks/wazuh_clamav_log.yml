@@ -1,0 +1,34 @@
+---
+- name: Add ClamAV log to Wazuh agent
+  hosts: wazuh_agents
+  become: true
+  become_method: sudo
+  become_user: root
+  become_flags: '-H'
+
+  vars:
+    ansible_remote_tmp: /tmp/.ansible
+
+  environment:
+    ANSIBLE_REMOTE_TEMP: /tmp/.ansible
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+
+  tasks:
+    - name: Backup ossec.conf
+      copy:
+        src: /var/ossec/etc/ossec.conf
+        dest: /var/ossec/etc/ossec.conf.bak
+        remote_src: yes
+
+    - name: Add ClamAV localfile to ossec.conf
+      blockinfile:
+        path: /var/ossec/etc/ossec.conf
+        insertafter: "<ossec_config>"
+        marker: "<!-- {mark} ANSIBLE CLAMAV LOG -->"
+        block: "{{ lookup('file', 'files/clamav_localfile.xml') }}"
+
+    - name: Restart wazuh-agent
+      systemd:
+        name: wazuh-agent
+        state: restarted
+        enabled: yes
