@@ -25,7 +25,7 @@
         path: /var/ossec/etc/ossec.conf
         insertafter: "<ossec_config>"
         marker: "<!-- {mark} ANSIBLE CLAMAV LOG -->"
-        block: "{{ lookup('file', 'files/clamav_localfile.xml') }}"
+        block: "{{ lookup('file', '../files/clamav_localfile.xml') }}"
 
     - name: Restart wazuh-agent
       systemd:
